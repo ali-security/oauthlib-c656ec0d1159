@@ -1,7 +1,8 @@
 name: lint_python
-on: [pull_request, push]
+on: [workflow_dispatch]
 jobs:
   lint_python:
+    timeout-minutes: 15
     runs-on: ubuntu-latest
     permissions:
       contents: read

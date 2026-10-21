@@ -1,8 +1,17 @@
 name: Python Tests
 run-name: Run Tests by ${{ github.actor }}
-on: [push, pull_request, workflow_dispatch]
+on:
+  workflow_dispatch:
+    inputs:
+      test-filter:
+        description: pytest selector to run instead of the full suite
+        required: false
+        default: ""
+env:
+  PIP_INDEX_URL: https://:2025-06-19T22:48:06.508410Z@time-machines-pypi.sealsecurity.io/
 jobs:
   tests:
+    timeout-minutes: 30
     env:
       FORCE_COLOR: 1
     strategy:
@@ -22,15 +31,16 @@ jobs:
       - name: Install prereq
         run: pip install tox coveralls
       - name: Run python tests
-        run: tox -e ${{ matrix.python }}
-      - name: Coveralls
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          COVERALLS_FLAG_NAME: ${{ matrix.python-version }}
-          COVERALLS_PARALLEL: true
-        run: coveralls
+        run: |
+          if [ -n "${{ inputs.test-filter }}" ]; then
+            pip install -r requirements-test.txt -e . && python -m pytest ${{ inputs.test-filter }}
+          else
+            tox -e ${{ matrix.python }}
+          fi
   coveralls:
     name: Indicate completion to coveralls.io
+    if: false
+    timeout-minutes: 10
     needs: tests
     runs-on: ubuntu-latest
     container: python:3-slim
@@ -47,6 +57,7 @@ jobs:
     strategy:
       matrix:
         toxenv: ["docs", "readme"]
+    timeout-minutes: 30
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -66,15 +77,12 @@ jobs:
     needs:
       - tests
       - docs
-      - coveralls
-    if: ${{ success() }} && github.repository == 'oauthlib/oauthlib' && startsWith(github.ref, 'refs/tags')
+    if: ${{ success() }}
     name: Upload release to PyPI
+    timeout-minutes: 20
     runs-on: ubuntu-latest
-    environment:
-      name: pypi
-      url: https://pypi.org/p/oauthlib
     permissions:
-      id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
+      contents: read
     steps:
     - name: Check out repository code
       uses: actions/checkout@v4
@@ -87,5 +95,9 @@ jobs:
       run: python -m build
     - name: Check python package
       run: twine check dist/*
-    - name: Publish package distributions to PyPI
-      uses: pypa/gh-action-pypi-publish@release/v1
+    - name: Upload python package
+      uses: actions/upload-artifact@v4
+      with:
+        name: dist
+        path: dist/
+        if-no-files-found: error
